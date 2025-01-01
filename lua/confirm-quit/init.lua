@@ -58,6 +58,14 @@ local function pcall_panic(func, ...)
   end
 end
 
+local function save(opts)
+  pcall_panic(vim.cmd.w, { bang = opts.bang, mods = { silent = true } })
+end
+
+local function saveall(opts)
+  pcall_panic(vim.cmd.wall, { bang = opts.bang, mods = { silent = true } })
+end
+
 local function quit(opts)
   pcall_panic(vim.cmd.quit, { bang = opts.bang, mods = { silent = true } })
 end
@@ -70,7 +78,7 @@ local function quitall(opts)
   pcall_panic(vim.cmd.quitall, { bang = opts.bang, mods = { silent = true } })
 end
 
-local confirm_quit_default_opts = { bang = false }
+local confirm_quit_default_opts = { bang = false, save = false }
 
 function M.confirm_quit(opts)
   opts = opts or confirm_quit_default_opts
@@ -78,17 +86,31 @@ function M.confirm_quit(opts)
   local is_last_tab_page = vim.fn.tabpagenr("$") == 1
   local is_last_viewable = is_last_window() and is_last_tab_page and is_last_buffer()
 
-  if is_last_viewable then
-    if opts.bang or is_floating_window() or vim.bo.modified and not vim.o.confirm or prompt_user_to_quit() then
-      quit(opts)
-    end
-  else
+  if opts.save then
+    save(opts)
+  end
+
+  if not is_last_viewable then
     bufdelete(opts)
+    return
+  end
+
+  local should_quit = opts.bang -- Force-quit without prompting
+    or vim.bo.modified and not vim.o.confirm -- or: Unsaved changes. Try quit to print error
+    or is_floating_window() -- or: Close floating window without prompting
+    or prompt_user_to_quit() -- or: Prompt to quit
+
+  if should_quit then
+    quit(opts)
   end
 end
 
 function M.confirm_quit_all(opts)
   opts = opts or confirm_quit_default_opts
+
+  if opts.save then
+    saveall(opts)
+  end
 
   local should_quit = opts.bang -- Force-quit without prompting
     or (is_any_buffer_modified() and not vim.o.confirm) -- or: Unsaved changes. Try quit to print error
@@ -103,10 +125,16 @@ local function setup_autocmds()
   local command_opts = { force = true, bang = true }
 
   vim.api.nvim_create_user_command("ConfirmQuit", function(opts)
-    M.confirm_quit({ bang = opts.bang })
+    M.confirm_quit({ bang = opts.bang, save = false })
   end, command_opts)
   vim.api.nvim_create_user_command("ConfirmQuitAll", function(opts)
-    M.confirm_quit_all({ bang = opts.bang })
+    M.confirm_quit_all({ bang = opts.bang, save = false })
+  end, command_opts)
+  vim.api.nvim_create_user_command("ConfirmQuitWithSave", function(opts)
+    M.confirm_quit({ bang = opts.bang, save = true })
+  end, command_opts)
+  vim.api.nvim_create_user_command("ConfirmQuitAllWithSave", function(opts)
+    M.confirm_quit_all({ bang = opts.bang, save = true })
   end, command_opts)
 end
 
@@ -119,6 +147,8 @@ local function setup_abbreviations()
 
 		cnoreabbrev <expr> q <SID>solely_in_cmd('q') ? 'ConfirmQuit' : 'q'
 		cnoreabbrev <expr> qa <SID>solely_in_cmd('qa') ? 'ConfirmQuitAll' : 'qa'
+		cnoreabbrev <expr> wq <SID>solely_in_cmd('wq') ? 'ConfirmQuitWithSave ' : 'wq'
+		cnoreabbrev <expr> wqa <SID>solely_in_cmd('wqa') ? 'ConfirmQuitAllWithSave' : 'wqa'
 		cnoreabbrev <expr> qq <SID>solely_in_cmd('qq') ? 'quit' : 'qq'
 	]])
 end
