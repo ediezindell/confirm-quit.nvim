@@ -35,6 +35,11 @@ local function is_last_window()
   return count == 1
 end
 
+local function is_last_buffer()
+  local listed_buffers = vim.fn.getbufinfo({ buflisted = 1 })
+  return #listed_buffers == 1
+end
+
 local function prompt_user_to_quit()
   return vim.fn.confirm(options.quit_message, "&Yes\n&No", 2, "Question") == 1
 end
@@ -51,6 +56,10 @@ local function quit(opts)
   pcall_panic(vim.cmd.quit, { bang = opts.bang, mods = { silent = true } })
 end
 
+local function bufdelete(opts)
+  pcall_panic(vim.cmd.bd, { bang = opts.bang, mods = { silent = true } })
+end
+
 local function quitall(opts)
   pcall_panic(vim.cmd.quitall, { bang = opts.bang, mods = { silent = true } })
 end
@@ -61,14 +70,14 @@ function M.confirm_quit(opts)
   opts = opts or confirm_quit_default_opts
 
   local is_last_tab_page = vim.fn.tabpagenr("$") == 1
-  local is_last_viewable = is_last_window() and is_last_tab_page
-  local should_quit = opts.bang -- Force-quit without prompting
-    or (vim.bo.modified and not vim.o.confirm) -- or: Unsaved changes. Try quit to print error
-    or not is_last_viewable -- or: Isn't last viewable. Simply quit
-    or prompt_user_to_quit() -- or: Last viewable. Prompt to quit
+  local is_last_viewable = is_last_window() and is_last_tab_page and is_last_buffer()
 
-  if should_quit then
-    quit(opts)
+  if is_last_viewable then
+    if opts.bang or vim.bo.modified and not vim.o.confirm or prompt_user_to_quit() then
+      quit(opts)
+    end
+  else
+    bufdelete(opts)
   end
 end
 
