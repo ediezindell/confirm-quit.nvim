@@ -40,6 +40,12 @@ local function is_last_buffer()
   return #listed_buffers == 1
 end
 
+local function is_floating_window()
+  local win_id = vim.api.nvim_get_current_win()
+  local config = vim.api.nvim_win_get_config(win_id)
+  return config.relative ~= ""
+end
+
 local function prompt_user_to_quit()
   return vim.fn.confirm(options.quit_message, "&Yes\n&No", 2, "Question") == 1
 end
@@ -73,7 +79,7 @@ function M.confirm_quit(opts)
   local is_last_viewable = is_last_window() and is_last_tab_page and is_last_buffer()
 
   if is_last_viewable then
-    if opts.bang or vim.bo.modified and not vim.o.confirm or prompt_user_to_quit() then
+    if opts.bang or is_floating_window() or vim.bo.modified and not vim.o.confirm or prompt_user_to_quit() then
       quit(opts)
     end
   else
